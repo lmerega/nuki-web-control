@@ -1,0 +1,26 @@
+# Example configuration file for Nuki Web Control.
+# Copy this file to "config.yaml" and adjust the values.
+
+bridge:
+  # Hostname or IP of the RaspiNukiBridge
+  host: "127.0.0.1"
+
+  # Port of the RaspiNukiBridge HTTP API (default: 8080)
+  port: 8080
+
+nuki:
+  # server.token from your RaspiNukiBridge / Nuki configuration
+  token: "CHANGE_ME"
+
+  # nukiId from the /list endpoint (integer)
+  id: 123456789
+
+  # 0 = Smart Lock, 2 = Smart Door, etc. (depending on your device)
+  device_type: 0
+
+web:
+  # Port where the Flask web app will listen
+  port: 5000
+
+  # Default UI language ("en" or "it")
+  language: "en"
