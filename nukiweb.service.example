@@ -1,0 +1,14 @@
+[Unit]
+Description=Nuki Web UI
+After=network.target
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/home/pi/nuki_web
+ExecStart=/home/pi/nuki_web/.venv/bin/python /home/pi/nuki_web/app.py
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
