@@ -262,38 +262,30 @@ After these steps, the new language will be available both via `?lang=de` in the
 
 On a Linux host (e.g. Raspberry Pi) you can run the app as a systemd service.
 
-Example unit file:
+This repository includes an example unit file:
 
-```ini
-[Unit]
-Description=Nuki Web UI
-After=network.target
-
-[Service]
-Type=simple
-User=pi
-WorkingDirectory=/home/pi/nuki_web
-ExecStart=/home/pi/nuki_web/.venv/bin/python /home/pi/nuki_web/app.py
-Restart=on-failure
-RestartSec=5
-
-[Install]
-WantedBy=multi-user.target
+```text
+nukiweb.service.example
 ```
 
-Save it as `/etc/systemd/system/nukiweb.service`, then:
+It is suitable for a typical Raspberry Pi setup where the project lives in `/home/pi/nuki_web` and the virtualenv is `.venv`.
+
+To use it on your system, copy it as a systemd unit:
 
 ```bash
+sudo cp nukiweb.service.example /etc/systemd/system/nukiweb.service
 sudo systemctl daemon-reload
 sudo systemctl enable nukiweb.service
 sudo systemctl start nukiweb.service
 ```
 
-Check status with:
+Then check the status with:
 
 ```bash
 sudo systemctl status nukiweb.service
 ```
+
+If your user or paths differ, adjust `nukiweb.service.example` before copying.
 
 ---
 
