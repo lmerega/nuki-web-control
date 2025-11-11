@@ -1,19 +1,19 @@
-import json
-from pathlib import Path
-
-import requests
+import os
 import yaml
+import requests
 from flask import Flask, render_template_string, request, redirect, url_for, jsonify
 
-# ========= CONFIG LOADING =========
-CONFIG_PATH = Path(__file__).with_name("config.yaml")
+
+# ========= Configuration loading =========
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+CONFIG_PATH = os.path.join(BASE_DIR, "config.yaml")
 
 
-def load_config():
-    """
-    Load configuration from config.yaml.
+def load_config() -> dict:
+    """Load configuration from config.yaml.
 
-    Example structure:
+    Expected structure:
 
     bridge:
       host: "127.0.0.1"
@@ -26,154 +26,140 @@ def load_config():
 
     web:
       port: 5000
-      language: "en"   # or "it"
+      language: "en"
     """
-    if not CONFIG_PATH.exists():
+    if not os.path.exists(CONFIG_PATH):
         raise RuntimeError(f"Config file not found: {CONFIG_PATH}")
 
-    with CONFIG_PATH.open("r", encoding="utf-8") as f:
-        return yaml.safe_load(f)
+    with open(CONFIG_PATH, "r", encoding="utf-8") as f:
+        data = yaml.safe_load(f) or {}
+
+    return data
 
 
 _cfg = load_config()
 
-BRIDGE_HOST = _cfg["bridge"]["host"]
-BRIDGE_PORT = _cfg["bridge"]["port"]
+BRIDGE_HOST = _cfg.get("bridge", {}).get("host", "127.0.0.1")
+BRIDGE_PORT = _cfg.get("bridge", {}).get("port", 8080)
 
-TOKEN = _cfg["nuki"]["token"]
-NUKI_ID = _cfg["nuki"]["id"]
-DEVICE_TYPE = _cfg["nuki"].get("device_type", 0)
+NUKI_ID = _cfg.get("nuki", {}).get("id")
+TOKEN = _cfg.get("nuki", {}).get("token", "")
+DEVICE_TYPE = _cfg.get("nuki", {}).get("device_type", 0)
 
 WEB_PORT = _cfg.get("web", {}).get("port", 5000)
+DEFAULT_LANG = _cfg.get("web", {}).get("language", "en")
 
-# Default UI language ("en" or "it")
-DEFAULT_LANG = _cfg.get("web", {}).get("language", "en").lower()
 
-# ========= UI STRINGS (I18N) =========
+if NUKI_ID is None:
+    raise RuntimeError("Missing 'nuki.id' in config.yaml")
+if not TOKEN:
+    raise RuntimeError("Missing 'nuki.token' in config.yaml")
+
+
+# ========= Localization strings =========
+
 STRINGS = {
     "en": {
         "html_lang": "en",
+        "title": "Nuki Web Control",
         "subtitle": "Secure remote control – instant actions and live lock status.",
         "bridge_label": "Bridge:",
-        "error_keyword": "Error",
 
-        "lock_state_title": "Lock state",
-        "state_details_title": "State details",
-        "state_details_subtitle": "Technical view",
+        "status_card_title": "Lock status",
+        "status_card_subtitle": "NukiID: {nuki_id}",
 
-        "lock_label": "Lock",
-        "door_label": "Door",
-        "battery_label": "Battery",
-        "last_update_label": "Last update",
+        "chip_lock": "Lock",
+        "chip_door": "Door",
+        "chip_batt": "Battery",
+        "chip_time": "Last update",
 
-        "reading_state": "Reading state…",
-        "refresh_state": "Refresh state",
+        "state_loading": "Reading state…",
 
         "btn_lock": "Lock",
         "btn_unlock": "Unlock",
         "btn_unlatch": "Open door",
         "btn_lockngo": "Lock'n'Go",
 
-        "normalized_json_summary": "Normalized JSON (for debug / integrations)",
-        "footer_http_api": "HTTP API",
+        "details_card_title": "State details",
+        "details_card_subtitle": "Technical view",
+        "details_summary": "Normalized JSON (for debug / integrations)",
 
-        # JS summary text pieces
-        "summary_lock_prefix": "Lock: ",
-        "summary_lock_state_prefix": "Lock: state=",
-        "summary_door_prefix": "Door: ",
-        "summary_door_state_prefix": "Door: doorState=",
-        "summary_batt_prefix": "Battery: ",
-        "summary_batt_critical_prefix": "Battery critical: ",
-        "summary_last_update_prefix": "Last update: ",
-        "no_state_data": "No state data available",
-
-        "error_prefix": "Error: ",
-        "js_error_prefix": "JS error: ",
-
-        "critical_label": "Critical",
-        "ok_label": "OK",
-
-        "date_locale": "en-GB",
-
-        # Language switcher labels
         "lang_en_label": "EN",
         "lang_it_label": "IT",
+
+        "unknown_command_msg": "Error: unknown command.",
+        "bridge_error_prefix": "Error: ",
+        "ok_msg": "OK (batteryCritical={batteryCritical})",
+        "bridge_response_prefix": "Bridge response: ",
+        "error_keyword": "Error",
+
+        "js_label_state": "State: ",
+        "js_label_door": "Door: ",
+        "js_label_battery": "Battery: ",
+        "js_label_last_update": "Last update: ",
+        "js_error_prefix": "JS error: ",
     },
     "it": {
         "html_lang": "it",
+        "title": "Nuki Web Control",
         "subtitle": "Controllo remoto sicuro – azioni immediate e stato live della serratura.",
         "bridge_label": "Bridge:",
-        "error_keyword": "Errore",
 
-        "lock_state_title": "Stato serratura",
-        "state_details_title": "Dettagli stato",
-        "state_details_subtitle": "Vista tecnica",
+        "status_card_title": "Stato serratura",
+        "status_card_subtitle": "NukiID: {nuki_id}",
 
-        "lock_label": "Serratura",
-        "door_label": "Porta",
-        "battery_label": "Batteria",
-        "last_update_label": "Ultimo aggiornamento",
+        "chip_lock": "Serratura",
+        "chip_door": "Porta",
+        "chip_batt": "Batteria",
+        "chip_time": "Ultimo aggiornamento",
 
-        "reading_state": "Lettura stato in corso…",
-        "refresh_state": "Aggiorna stato",
+        "state_loading": "Lettura stato in corso…",
 
         "btn_lock": "Chiudi",
         "btn_unlock": "Sblocca",
         "btn_unlatch": "Apri porta",
         "btn_lockngo": "Lock'n'Go",
 
-        "normalized_json_summary": "JSON normalizzato (per debug / integrazioni)",
-        "footer_http_api": "HTTP API",
+        "details_card_title": "Dettagli stato",
+        "details_card_subtitle": "Vista tecnica",
+        "details_summary": "JSON normalizzato (per debug / integrazioni)",
 
-        # JS summary text pieces
-        "summary_lock_prefix": "Serratura: ",
-        "summary_lock_state_prefix": "Serratura: state=",
-        "summary_door_prefix": "Porta: ",
-        "summary_door_state_prefix": "Porta: doorState=",
-        "summary_batt_prefix": "Batteria: ",
-        "summary_batt_critical_prefix": "Batteria critica: ",
-        "summary_last_update_prefix": "Ultimo aggiornamento: ",
-        "no_state_data": "Nessun dato di stato disponibile",
-
-        "error_prefix": "Errore: ",
-        "js_error_prefix": "Errore JS: ",
-
-        "critical_label": "Critica",
-        "ok_label": "OK",
-
-        "date_locale": "it-IT",
-
-        # Language switcher labels
         "lang_en_label": "EN",
         "lang_it_label": "IT",
+
+        "unknown_command_msg": "Errore: comando sconosciuto.",
+        "bridge_error_prefix": "Errore: ",
+        "ok_msg": "OK (batteryCritical={batteryCritical})",
+        "bridge_response_prefix": "Risposta bridge: ",
+        "error_keyword": "Errore",
+
+        "js_label_state": "Stato: ",
+        "js_label_door": "Porta: ",
+        "js_label_battery": "Batteria: ",
+        "js_label_last_update": "Ultimo aggiornamento: ",
+        "js_error_prefix": "Errore JS: ",
     },
 }
 
-if DEFAULT_LANG not in STRINGS:
-    DEFAULT_LANG = "en"
 
+def resolve_lang() -> str:
+    """Resolve current language from ?lang= query param or config default.
 
-def get_lang():
+    Fallback to English if unknown code.
     """
-    Determine current UI language.
-
-    Priority:
-    1. "lang" query string parameter
-    2. DEFAULT_LANG from config
-    """
-    lang = request.args.get("lang") or DEFAULT_LANG
-    lang = lang.lower()
-    return lang if lang in STRINGS else DEFAULT_LANG
+    lang = request.args.get("lang") or DEFAULT_LANG or "en"
+    if lang not in STRINGS:
+        lang = "en"
+    return lang
 
 
-# ====================================
-
-app = Flask(__name__)
+# ========= Bridge helpers =========
 
 
 def get_state():
     """
-    Call /lockState on the bridge to obtain the LIVE state of the Nuki lock.
+    Call /lockState on RaspiNukiBridge to get LIVE Nuki state.
+    Errors are normalized so we never leak the full URL or token.
     """
     try:
         resp = requests.get(
@@ -187,13 +173,29 @@ def get_state():
         )
         resp.raise_for_status()
         return resp.json()
-    except Exception as e:
-        return {"error": str(e)}
+
+    except requests.exceptions.ConnectionError:
+        # Bridge not reachable at all (host down / port closed)
+        return {"error": "Bridge unreachable (connection error while calling /lockState)."}
+
+    except requests.exceptions.Timeout:
+        # Bridge did not answer in time
+        return {"error": "Bridge timeout while calling /lockState."}
+
+    except requests.exceptions.HTTPError as e:
+        # Bridge replied with 4xx / 5xx. Do NOT expose the full URL (contains token).
+        status = e.response.status_code if e.response is not None else "HTTP error"
+        return {"error": f"Bridge returned HTTP {status} for /lockState."}
+
+    except Exception:
+        # Generic, safe message
+        return {"error": "Unexpected error while talking to the bridge (/lockState)."}
+
 
 
 def send_action(action: int):
     """
-    Send a lockAction to the bridge.
+    Send /lockAction to RaspiNukiBridge.
 
     action:
       1 = unlock
@@ -201,6 +203,8 @@ def send_action(action: int):
       3 = unlatch (open door)
       4 = lock'n'go
       5 = lock'n'go + unlatch
+
+    Errors are normalized so we never leak the full URL or token.
     """
     try:
         resp = requests.get(
@@ -215,16 +219,29 @@ def send_action(action: int):
         )
         resp.raise_for_status()
         return resp.json()
-    except Exception as e:
-        return {"error": str(e)}
+
+    except requests.exceptions.ConnectionError:
+        return {"error": "Bridge unreachable (connection error while calling /lockAction)."}
+
+    except requests.exceptions.Timeout:
+        return {"error": "Bridge timeout while calling /lockAction."}
+
+    except requests.exceptions.HTTPError as e:
+        status = e.response.status_code if e.response is not None else "HTTP error"
+        return {"error": f"Bridge returned HTTP {status} for /lockAction."}
+
+    except Exception:
+        return {"error": "Unexpected error while talking to the bridge (/lockAction)."}
 
 
-HTML_TEMPLATE = """
-<!doctype html>
+
+# ========= HTML template =========
+
+HTML_TEMPLATE = """<!doctype html>
 <html lang="{{ ui.html_lang }}">
 <head>
   <meta charset="utf-8">
-  <title>Nuki Web Control</title>
+  <title>{{ ui.title }}</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
 
   <style>
@@ -549,27 +566,37 @@ HTML_TEMPLATE = """
     }
 
     /* Language switcher */
+
+    .top-right-box {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 8px;
+    }
+
     .lang-switcher {
       display: inline-flex;
-      gap: 4px;
+      gap: 6px;
       align-items: center;
+      justify-content: flex-end;
     }
 
     .lang-btn {
       border-radius: 999px;
-      border: 1px solid rgba(148,163,184,0.6);
-      background: rgba(15,23,42,0.9);
-      color: var(--text-main);
+      border: 1px solid rgba(148,163,184,0.5);
+      background: rgba(15,23,42,0.8);
+      padding: 4px 8px;
       font-size: 0.75rem;
-      padding: 3px 8px 3px 6px;
       cursor: pointer;
       display: inline-flex;
       align-items: center;
       gap: 4px;
-      opacity: 0.9;
+      color: var(--text-muted);
+      width: auto;
+      box-shadow: none;
     }
 
-    .lang-btn span.flag {
+    .lang-btn .flag {
       font-size: 0.9rem;
     }
 
@@ -577,46 +604,37 @@ HTML_TEMPLATE = """
       background: linear-gradient(135deg, #3b82f6, #1d4ed8);
       color: #fff;
       border-color: transparent;
-      opacity: 1;
+    }
+
+    .lang-btn.active .flag {
+      filter: drop-shadow(0 0 3px rgba(15,23,42,0.8));
     }
   </style>
-
-  <script>
-    // UI strings injected from Flask (per language)
-    window.UI = {{ ui_json | safe }};
-    window.CURRENT_LANG = "{{ lang }}";
-  </script>
 
   <script>
     function formatTimestamp(ts) {
       if (!ts) return "";
       try {
         const d = new Date(ts);
-        const locale = (window.UI && window.UI.date_locale) || "en-GB";
-        return d.toLocaleString(locale, { timeZone: "Europe/Rome" });
+        return d.toLocaleString("it-IT", { timeZone: "Europe/Rome" });
       } catch (e) {
         return ts;
       }
     }
 
-    // Extracts battery percentage from multiple possible formats
     function extractBatteryPercent(data) {
       if (typeof data.batteryCharge === "number") {
         return data.batteryCharge;
       }
-
       if (typeof data.batteryChargeState === "number") {
         return data.batteryChargeState;
       }
-
       if (data.batteryChargeState && typeof data.batteryChargeState.chargeLevel === "number") {
         return data.batteryChargeState.chargeLevel;
       }
-
       if (typeof data.batteryLevel === "number") {
         return data.batteryLevel;
       }
-
       return null;
     }
 
@@ -628,32 +646,31 @@ HTML_TEMPLATE = """
     }
 
     function buildStateSummary(data) {
-      const UI = window.UI || {};
       let parts = [];
 
       if (data.stateName) {
-        parts.push(UI.summary_lock_prefix + data.stateName + " (state=" + data.state + ")");
+        parts.push("{{ ui.js_label_state }}" + data.stateName + " (state=" + data.state + ")");
       } else if (data.state !== undefined) {
-        parts.push(UI.summary_lock_state_prefix + data.state);
+        parts.push("{{ ui.js_label_state }}state=" + data.state);
       }
 
       if (data.doorStateName) {
-        parts.push(UI.summary_door_prefix + data.doorStateName + " (doorState=" + data.doorState + ")");
+        parts.push("{{ ui.js_label_door }}" + data.doorStateName + " (doorState=" + data.doorState + ")");
       }
 
       const battPct = extractBatteryPercent(data);
       if (battPct !== null) {
-        parts.push(UI.summary_batt_prefix + battPct + "%");
+        parts.push("{{ ui.js_label_battery }}" + battPct + "%");
       } else if (data.batteryCritical !== undefined) {
-        parts.push(UI.summary_batt_critical_prefix + data.batteryCritical);
+        parts.push("{{ ui.js_label_battery }}" + (data.batteryCritical ? "CRITICAL" : "OK"));
       }
 
       if (data.timestamp) {
-        parts.push(UI.summary_last_update_prefix + formatTimestamp(data.timestamp));
+        parts.push("{{ ui.js_label_last_update }}" + formatTimestamp(data.timestamp));
       }
 
       if (parts.length === 0) {
-        return UI.no_state_data || "No state data available";
+        return "No state data available";
       }
       return parts.join(" • ");
     }
@@ -667,21 +684,20 @@ HTML_TEMPLATE = """
     }
 
     async function refreshState() {
-      const UI = window.UI || {};
+      const stateEl = document.getElementById("state-text");
+      const rawEl = document.getElementById("state-raw");
+      const lockEl = document.getElementById("chip-lock");
+      const doorEl = document.getElementById("chip-door");
+      const battEl = document.getElementById("chip-batt");
+      const timeEl = document.getElementById("chip-time");
+
       try {
-        const res = await fetch("/api/state?lang=" + encodeURIComponent(window.CURRENT_LANG || ""));
-        const data = await res.json();
+        const res = await fetch("/api/state");
 
-        const stateEl = document.getElementById("state-text");
-        const rawEl = document.getElementById("state-raw");
-
-        const lockEl = document.getElementById("chip-lock");
-        const doorEl = document.getElementById("chip-door");
-        const battEl = document.getElementById("chip-batt");
-        const timeEl = document.getElementById("chip-time");
-
-        if (data.error) {
-          stateEl.textContent = (UI.error_prefix || "Error: ") + data.error;
+        // Se proprio l'endpoint risponde 500/404 ecc.
+        if (!res.ok) {
+          stateEl.textContent = "{{ ui.bridge_error_prefix }}" +
+            "HTTP " + res.status + " from /api/state";
           rawEl.textContent = "";
 
           lockEl.querySelector(".chip-value").textContent = "-";
@@ -692,6 +708,22 @@ HTML_TEMPLATE = """
           return;
         }
 
+        const data = await res.json();
+
+        if (data.error) {
+          // Errore lato bridge o lato requests
+          stateEl.textContent = "{{ ui.bridge_error_prefix }}" + data.error;
+          rawEl.textContent = "";
+
+          lockEl.querySelector(".chip-value").textContent = "-";
+          doorEl.querySelector(".chip-value").textContent = "-";
+          battEl.querySelector(".chip-value").textContent = "-";
+          battEl.querySelector(".chip-value").className = "chip-value";
+          timeEl.querySelector(".chip-value").textContent = "-";
+          return;
+        }
+
+        // --- da qui in giù rimane uguale a prima ---
         stateEl.textContent = buildStateSummary(data);
 
         const battPct = extractBatteryPercent(data);
@@ -726,9 +758,7 @@ HTML_TEMPLATE = """
         if (battPct !== null) {
           battValueEl.textContent = battPct.toString() + "%";
         } else if (data.batteryCritical !== undefined) {
-          battValueEl.textContent = data.batteryCritical
-            ? (UI.critical_label || "Critical")
-            : (UI.ok_label || "OK");
+          battValueEl.textContent = data.batteryCritical ? "CRITICAL" : "OK";
         } else {
           battValueEl.textContent = "-";
         }
@@ -740,7 +770,7 @@ HTML_TEMPLATE = """
           battExtraEl.textContent = battLabel;
           battExtraEl.style.display = "inline-flex";
         } else if (data.batteryCritical === true) {
-          battExtraEl.textContent = UI.critical_label || "Critical";
+          battExtraEl.textContent = "CRITICAL";
           battExtraEl.style.display = "inline-flex";
         } else {
           battExtraEl.style.display = "none";
@@ -754,36 +784,30 @@ HTML_TEMPLATE = """
         }
 
       } catch (e) {
-        const stateEl = document.getElementById("state-text");
-        const rawEl = document.getElementById("state-raw");
-        stateEl.textContent = (UI.js_error_prefix || "JS error: ") + e;
+        // Errore di rete / JS
+        stateEl.textContent = "{{ ui.js_error_prefix }}" + e;
         rawEl.textContent = "";
+
+        lockEl.querySelector(".chip-value").textContent = "-";
+        doorEl.querySelector(".chip-value").textContent = "-";
+        battEl.querySelector(".chip-value").textContent = "-";
+        battEl.querySelector(".chip-value").className = "chip-value";
+        timeEl.querySelector(".chip-value").textContent = "-";
       }
     }
 
-    function setLang(lang) {
-      const url = new URL(window.location.href);
-      url.searchParams.set("lang", lang);
-      window.location.href = url.toString();
-    }
-
-    function initLangButtons() {
-      const current = window.CURRENT_LANG || "en";
-      const buttons = document.querySelectorAll(".lang-btn");
-      buttons.forEach(btn => {
-        const lang = btn.getAttribute("data-lang");
-        if (lang === current) {
-          btn.classList.add("active");
-        }
-        btn.addEventListener("click", () => setLang(lang));
-      });
-    }
-
-    window.refreshState = refreshState;
-
     window.addEventListener("DOMContentLoaded", () => {
-      initLangButtons();
       refreshState();
+
+      const langButtons = document.querySelectorAll(".lang-btn");
+      langButtons.forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const lang = btn.getAttribute("data-lang");
+          const url = new URL(window.location.href);
+          url.searchParams.set("lang", lang);
+          window.location.href = url.toString();
+        });
+      });
     });
   </script>
 </head>
@@ -794,28 +818,26 @@ HTML_TEMPLATE = """
       <div class="header">
         <div class="title-group">
           <div class="title">
-            Nuki Web Control
-            <span class="title-pill">Raspberry Pi · RaspiNukiBridge</span>
+            {{ ui.title }}
+            <span class="title-pill">Raspberry Pi • RaspiNukiBridge</span>
           </div>
           <div class="subtitle">
             {{ ui.subtitle }}
           </div>
         </div>
-
-        <div style="display:flex; flex-direction:column; align-items:flex-end; gap:8px;">
+        <div class="top-right-box">
+          <div class="lang-switcher" aria-label="Language">
+            {% for btn in lang_buttons %}
+            <button type="button"
+                    class="lang-btn {% if btn.code == lang %}active{% endif %}"
+                    data-lang="{{ btn.code }}">
+              <span>{{ btn.label }}</span>
+            </button>
+            {% endfor %}
+          </div>
           <div class="endpoint-pill">
             <span>{{ ui.bridge_label }}</span>
             <code>{{ bridge_host }}:{{ bridge_port }}</code>
-          </div>
-          <div class="lang-switcher" aria-label="Language">
-            <button type="button" class="lang-btn" data-lang="en">
-              <span class="flag">🇬🇧</span>
-              <span>{{ ui.lang_en_label }}</span>
-            </button>
-            <button type="button" class="lang-btn" data-lang="it">
-              <span class="flag">🇮🇹</span>
-              <span>{{ ui.lang_it_label }}</span>
-            </button>
           </div>
         </div>
       </div>
@@ -827,57 +849,56 @@ HTML_TEMPLATE = """
       {% endif %}
 
       <div class="layout">
-        <!-- Left column: state + commands -->
         <div class="card">
           <div class="card-header">
-            <div class="card-title">{{ ui.lock_state_title }}</div>
-            <small>NukiID: {{ nuki_id }}</small>
+            <div class="card-title">{{ ui.status_card_title }}</div>
+            <small>{{ ui.status_card_subtitle.format(nuki_id=nuki_id) }}</small>
           </div>
 
           <div class="status-row" style="margin-bottom: 8px;">
             <div class="chip" id="chip-lock">
-              <div class="chip-label">{{ ui.lock_label }}</div>
+              <div class="chip-label">{{ ui.chip_lock }}</div>
               <div class="chip-value">-</div>
             </div>
             <div class="chip" id="chip-door">
-              <div class="chip-label">{{ ui.door_label }}</div>
+              <div class="chip-label">{{ ui.chip_door }}</div>
               <div class="chip-value">-</div>
             </div>
             <div class="chip" id="chip-batt">
-              <div class="chip-label">{{ ui.battery_label }}</div>
+              <div class="chip-label">{{ ui.chip_batt }}</div>
               <div class="chip-value">-</div>
               <span class="chip-pill" style="display:none;"></span>
             </div>
             <div class="chip" id="chip-time">
-              <div class="chip-label">{{ ui.last_update_label }}</div>
+              <div class="chip-label">{{ ui.chip_time }}</div>
               <div class="chip-value">-</div>
             </div>
           </div>
 
           <div style="display:flex; justify-content:space-between; align-items:center; margin-top:4px;">
             <div style="font-size:0.86rem; color:var(--text-muted);">
-              <span id="state-text">{{ ui.reading_state }}</span>
+              <span id="state-text">{{ ui.state_loading }}</span>
             </div>
             <button type="button" class="btn-secondary" onclick="refreshState()">
               <span class="btn-icon">🔄</span>
-              {{ ui.refresh_state }}
+              Refresh
             </button>
           </div>
 
           <div class="buttons-grid" style="margin-top:12px;">
-            <form method="post" action="/action/lock?lang={{ lang }}">
+            <form method="post" action="/action/chiudi?lang={{ lang }}">
               <button class="btn-lock" type="submit">
                 <span class="btn-icon">🔒</span> {{ ui.btn_lock }}
               </button>
             </form>
 
-            <form method="post" action="/action/unlock?lang={{ lang }}">
+            <form method="post" action="/action/sblocca?lang={{ lang }}">
               <button class="btn-unlock" type="submit">
                 <span class="btn-icon">🔓</span> {{ ui.btn_unlock }}
               </button>
             </form>
 
-            <form method="post" action="/action/unlatch?lang={{ lang }}">
+            <form method="post" action="/action/apri?lang={{ lang }}">
               <button class="btn-unlatch" type="submit">
                 <span class="btn-icon">🚪</span> {{ ui.btn_unlatch }}
               </button>
@@ -891,21 +912,20 @@ HTML_TEMPLATE = """
           </div>
         </div>
 
-        <!-- Right column: JSON details -->
         <div class="card">
           <div class="card-header">
-            <div class="card-title">{{ ui.state_details_title }}</div>
-            <small>{{ ui.state_details_subtitle }}</small>
+            <div class="card-title">{{ ui.details_card_title }}</div>
+            <small>{{ ui.details_card_subtitle }}</small>
           </div>
           <div class="details">
             <details open>
-              <summary>{{ ui.normalized_json_summary }}</summary>
+              <summary>{{ ui.details_summary }}</summary>
               <pre id="state-raw">{}</pre>
             </details>
           </div>
 
           <div class="footer">
-            {{ ui.footer_http_api }}: <code>/lockState</code> • <code>/lockAction</code> • <code>/list</code>
+            HTTP API: <code>/lockState</code> • <code>/lockAction</code> • <code>/list</code>
           </div>
         </div>
       </div>
@@ -916,15 +936,20 @@ HTML_TEMPLATE = """
 """
 
 
+app = Flask(__name__)
+
+
 @app.route("/")
 def index():
-    """
-    Main page: renders the HTML control panel.
-    """
-    msg = request.args.get("msg", "")
-    lang = get_lang()
+    lang = resolve_lang()
     ui = STRINGS[lang]
-    ui_json = json.dumps(ui, ensure_ascii=False)
+
+    msg = request.args.get("msg", "")
+
+    lang_buttons = [
+        {"code": "en", "label": STRINGS["en"]["lang_en_label"]},
+        {"code": "it", "label": STRINGS["it"]["lang_it_label"]},
+    ]
 
     return render_template_string(
         HTML_TEMPLATE,
@@ -933,55 +958,47 @@ def index():
         bridge_port=BRIDGE_PORT,
         nuki_id=NUKI_ID,
         ui=ui,
-        ui_json=ui_json,
         lang=lang,
+        lang_buttons=lang_buttons,
     )
 
 
 @app.route("/api/state")
 def api_state():
-    """
-    API endpoint: returns current lock state as JSON.
-    """
     return jsonify(get_state())
 
 
 @app.route("/action/<cmd>", methods=["POST"])
 def action(cmd):
-    """
-    Handle lock actions triggered by the UI buttons.
-    """
-    lang = get_lang()
+    lang = resolve_lang()
     ui = STRINGS[lang]
 
     mapping = {
-        "unlock": 1,   # unlock
-        "lock": 2,     # lock
-        "unlatch": 3,  # open door
-        "lockngo": 4,  # lock'n'go
-        # optionally: "lockngounlatch": 5
+        "sblocca": 1,   # unlock
+        "chiudi": 2,    # lock
+        "apri": 3,      # unlatch (open door)
+        "lockngo": 4,   # lock'n'go
+        # "lockngounlatch": 5,
     }
 
     if cmd not in mapping:
-        msg = f"{ui['error_prefix']}unknown command."
-        return redirect(url_for("index", msg=msg, lang=lang))
+        return redirect(url_for("index", msg=ui["unknown_command_msg"], lang=lang))
 
     result = send_action(mapping[cmd])
 
     if "error" in result:
-        msg = f"{ui['error_prefix']}{result['error']}"
+        msg = ui["bridge_error_prefix"] + str(result["error"])
     else:
         if result.get("success"):
-            msg = f"OK (batteryCritical={result.get('batteryCritical', False)})"
+            msg = ui["ok_msg"].format(
+                batteryCritical=result.get("batteryCritical", False)
+            )
         else:
-            if lang == "it":
-                msg = f"Risposta bridge: {result}"
-            else:
-                msg = f"Bridge response: {result}"
+            msg = ui["bridge_response_prefix"] + str(result)
 
     return redirect(url_for("index", msg=msg, lang=lang))
 
 
 if __name__ == "__main__":
-    # Listen on all interfaces so the app is reachable from your network/VPN
+    # Listen on all interfaces so it is reachable from your LAN / VPN
     app.run(host="0.0.0.0", port=WEB_PORT)
