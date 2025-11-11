@@ -21,7 +21,7 @@ The app:
 - A running **RaspiNukiBridge** instance (e.g. on a Raspberry Pi)
 - A working Nuki lock configured in the bridge
 
-Python dependencies:
+Install Python dependencies with:
 
 ```bash
 pip install -r requirements.txt
@@ -50,7 +50,7 @@ web:
   language: "en"
 ```
 
-### Steps
+### Setup steps
 
 1. Copy the example configuration:
 
@@ -59,6 +59,7 @@ web:
    ```
 
 2. Edit `config.yaml` and set:
+
    - `bridge.host` and `bridge.port` to your RaspiNukiBridge address
    - `nuki.token` to the `server.token` from your Nuki / bridge configuration
    - `nuki.id` to the `nukiId` returned by the `/list` endpoint
@@ -66,7 +67,7 @@ web:
    - `web.port` for the Flask HTTP port
    - `web.language` to `"en"` or `"it"` for the default UI language
 
-3. Make sure `config.yaml` is **ignored by Git** (see `.gitignore`).
+3. Make sure `config.yaml` is **ignored by Git** (see `.gitignore`) and never committed.
 
 ---
 
@@ -84,9 +85,13 @@ By default, the app listens on:
 http://0.0.0.0:<web.port>
 ```
 
-(e.g. `http://raspberrypi:5000`)
+For example, if `web.port` is `5000`:
 
-Listening on `0.0.0.0` makes the app reachable from your local network and/or VPN.
+```text
+http://raspberrypi:5000/
+```
+
+Listening on `0.0.0.0` makes the app reachable from your local network and/or VPN (depending on your routing / firewall).
 
 ---
 
@@ -124,17 +129,18 @@ The UI calls:
 
 Internally, the app talks to the RaspiNukiBridge:
 
-- `GET http://<bridge.host>:<bridge.port>/lockState`
-  - Query params: `nukiId`, `deviceType`, `token`
-- `GET http://<bridge.host>:<bridge.port>/lockAction`
-  - Query params: `nukiId`, `deviceType`, `action`, `token`
+- `GET http://<bridge.host>:<bridge.port>/lockState`  
+  Query params: `nukiId`, `deviceType`, `token`
+
+- `GET http://<bridge.host>:<bridge.port>/lockAction`  
+  Query params: `nukiId`, `deviceType`, `action`, `token`
 
 Action mapping:
 
-- `1` → unlock
-- `2` → lock
-- `3` → unlatch (open door)
-- `4` → lock'n'go
+- `1` → unlock  
+- `2` → lock  
+- `3` → unlatch (open door)  
+- `4` → lock'n'go  
 - `5` → lock'n'go + unlatch (not wired by default, but easy to add)
 
 ---
@@ -171,6 +177,7 @@ The current language can be changed at runtime in two ways:
    - 🇮🇹 **IT**
 
    Clicking a button:
+
    - updates the `?lang=...` query parameter
    - reloads the page
    - keeps the language consistent for:
@@ -179,6 +186,114 @@ The current language can be changed at runtime in two ways:
      - `/api/state` calls
 
 The actual UI strings are defined in the `STRINGS` dictionary in `app.py`.
+
+---
+
+## Adding a new language
+
+The app uses a simple in-code dictionary for i18n, so adding a new language is straightforward.
+
+1. **Edit `app.py` and extend the `STRINGS` dict**
+
+   Find:
+
+   ```python
+   STRINGS = {
+       "en": { ... },
+       "it": { ... },
+   }
+   ```
+
+   Add a new entry, for example for German:
+
+   ```python
+   STRINGS["de"] = {
+       "html_lang": "de",
+       "subtitle": "Secure remote control – instant actions and live lock status. (DE)",
+       "bridge_label": "Bridge:",
+       "error_keyword": "Error",
+       # ...copy all keys from "en" or "it" and translate them...
+   }
+   ```
+
+   Make sure the new language block defines **all** the keys used by the template and JS  
+   (you can copy the `"en"` block and translate value by value).
+
+2. **Add a button in the language switcher in the HTML template**
+
+   In the header, there is a block like:
+
+   ```html
+   <div class="lang-switcher" aria-label="Language">
+     <button type="button" class="lang-btn" data-lang="en">
+       <span class="flag">🇬🇧</span>
+       <span>{{ ui.lang_en_label }}</span>
+     </button>
+     <button type="button" class="lang-btn" data-lang="it">
+       <span class="flag">🇮🇹</span>
+       <span>{{ ui.lang_it_label }}</span>
+     </button>
+   </div>
+   ```
+
+   Add another button, for example:
+
+   ```html
+   <button type="button" class="lang-btn" data-lang="de">
+     <span class="flag">🇩🇪</span>
+     <span>DE</span>
+   </button>
+   ```
+
+3. **(Optional) Set the default language in `config.yaml`**
+
+   ```yaml
+   web:
+     language: "de"
+   ```
+
+   If present and valid, this will be the default language when `?lang=` is not specified.
+
+After these steps, the new language will be available both via `?lang=de` in the URL and via the new flag button in the UI.
+
+---
+
+## Systemd service (optional)
+
+On a Linux host (e.g. Raspberry Pi) you can run the app as a systemd service.
+
+Example unit file:
+
+```ini
+[Unit]
+Description=Nuki Web UI
+After=network.target
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/home/pi/nuki_web
+ExecStart=/home/pi/nuki_web/.venv/bin/python /home/pi/nuki_web/app.py
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Save it as `/etc/systemd/system/nukiweb.service`, then:
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable nukiweb.service
+sudo systemctl start nukiweb.service
+```
+
+Check status with:
+
+```bash
+sudo systemctl status nukiweb.service
+```
 
 ---
 
@@ -197,4 +312,4 @@ Recommended:
 
 ## License
 
-Choose a license that fits your needs (MIT, Apache-2.0, etc.) and add it here.
+This project is licensed under the MIT License – see the `LICENSE` file for details.
