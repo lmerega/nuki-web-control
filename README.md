@@ -1,5 +1,9 @@
 # Nuki Web Control (RaspiNukiBridge UI)
 
+## Screenshot
+
+![Nuki Web Control UI](images/nuki-web-control-ui.png)
+
 A small Flask web UI to control a Nuki Smart Lock via a RaspiNukiBridge instance.
 
 The app:
