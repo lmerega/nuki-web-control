@@ -1,10 +1,28 @@
 # Nuki Web Control (RaspiNukiBridge UI)
 
+<p align="center">
+  <a href="https://github.com/lmerega/nuki-web-control/stargazers">
+    <img src="https://img.shields.io/github/stars/lmerega/nuki-web-control?style=flat-square&color=yellow" alt="GitHub stars" />
+  </a>
+  <a href="https://github.com/lmerega/nuki-web-control/issues">
+    <img src="https://img.shields.io/github/issues/lmerega/nuki-web-control?style=flat-square&color=yellow" alt="GitHub issues" />
+  </a>
+  <img src="https://img.shields.io/badge/RaspiNukiBridge-required-blue?style=flat-square" alt="Requires RaspiNukiBridge" />
+  <img src="https://img.shields.io/badge/Flask-Web%20UI-blue?style=flat-square" alt="Flask web UI" />
+  <img src="https://img.shields.io/badge/Raspberry%20Pi-compatible-red?style=flat-square" alt="Raspberry Pi compatible" />
+  <img src="https://img.shields.io/badge/Python-3.9%2B-green?style=flat-square" alt="Python 3.9+" />
+  <img src="https://img.shields.io/badge/License-MIT-lightgrey?style=flat-square" alt="MIT License" />
+  <br>
+  <a href="https://github.com/dauden1184/RaspiNukiBridge">
+    <img src="https://img.shields.io/badge/Powered%20by-RaspiNukiBridge-blue?style=flat-square" alt="Powered by RaspiNukiBridge"/>
+  </a>
+</p>
+
 ## Screenshot
 
 ![Nuki Web Control UI](images/nuki-web-control-ui.png)
 
-A small Flask web UI to control a Nuki Smart Lock via a RaspiNukiBridge instance.
+A small Flask web UI to control a Nuki Smart Lock via a [RaspiNukiBridge](https://github.com/dauden1184/RaspiNukiBridge) instance.
 
 The app:
 
@@ -22,7 +40,7 @@ The app:
 ## Requirements
 
 - Python 3.9+ (recommended)
-- A running **RaspiNukiBridge** instance (e.g. on a Raspberry Pi)
+- A running **[RaspiNukiBridge](https://github.com/dauden1184/RaspiNukiBridge)** instance (e.g. on a Raspberry Pi)
 - A working Nuki lock configured in the bridge
 
 Install Python dependencies with:
@@ -131,7 +149,7 @@ The UI calls:
 
 ## HTTP API overview
 
-Internally, the app talks to the RaspiNukiBridge:
+Internally, the app talks to the **[RaspiNukiBridge](https://github.com/dauden1184/RaspiNukiBridge)**:
 
 - `GET http://<bridge.host>:<bridge.port>/lockState`  
   Query params: `nukiId`, `deviceType`, `token`
